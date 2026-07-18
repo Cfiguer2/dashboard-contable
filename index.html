@@ -362,7 +362,7 @@ window.eliminarPeriodo=async(i)=>{
   const p=hist[i];
   if(p.id)await deleteDoc(doc(db,'clientes',CC.id,'periodos',p.id));
   hist.splice(i,1);
-  await setDoc(doc(db,'clientes',CC.id),{periodos:hist.length,ultimoPeriodo:hist.length>0?hist[hist.length-1].lbl:'''},{merge:true});
+      await setDoc(doc(db,'clientes',CC.id),{periodos:hist.length,ultimoPeriodo:hist.length>0?hist[hist.length-1].lbl:''},{merge:true});
   resetActs();render();
 };
 
