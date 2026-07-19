@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.3/chart.umd.min.js"></script>
 
 <style>
 :root{
@@ -231,6 +232,16 @@ tr.row-click:hover td{ background:var(--azul-050); }
 .ind-card-head .lbl{ font-size:13px; font-weight:700; color:var(--texto); }
 .ind-card-head .sub{ font-size:11px; color:var(--texto-suave); margin-top:2px; }
 .ind-card-head .right{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
+.ind-card-head .delta{ font-size:11px; font-weight:700; padding:2px 8px; border-radius:12px; margin-top:4px; display:inline-flex; align-items:center; gap:3px; }
+.ind-card-head .delta.up{ background:var(--exito-bg); color:var(--exito); }
+.ind-card-head .delta.down{ background:var(--error-bg); color:var(--error); }
+.ind-card-head .delta.flat{ background:var(--gris-100); color:var(--texto-suave); }
+.tendencia-box{ background:#fff; border:1px solid var(--gris-200); border-radius:9px; padding:14px 16px; margin-bottom:14px; }
+.tendencia-box h5{ margin:0 0 4px; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--texto-suave); }
+.tendencia-comparativos{ display:flex; gap:18px; margin-top:10px; flex-wrap:wrap; }
+.tendencia-comp-item{ font-size:12px; color:var(--texto-suave); }
+.tendencia-comp-item strong{ display:block; font-size:13.5px; color:var(--texto); margin-top:2px; }
+.tendencia-chart-wrap{ position:relative; height:150px; margin-top:8px; }
 .ind-card-head .val{ font-size:19px; font-weight:800; color:var(--gcolor, var(--azul)); text-align:right; }
 .ind-card-head .val.nd{ color:var(--gris); font-size:12.5px; font-weight:600; }
 .ind-card-head .chev{ color:var(--texto-suave); font-size:12px; transition:transform .15s; }
@@ -243,6 +254,9 @@ tr.row-click:hover td{ background:var(--azul-050); }
 .ind-detail-col h5{ margin:0; padding:9px 12px; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px; color:#fff; background:var(--gcolor, var(--azul)); }
 .ind-detail-col table{ width:100%; font-size:12px; border-collapse:collapse; }
 .ind-detail-col td{ padding:6px 12px; border-bottom:1px solid var(--gris-100); }
+.ind-detail-col td:last-child{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.ind-detail-col th{ padding:6px 12px; font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--texto-suave); text-align:left; border-bottom:1px solid var(--gris-100); }
+.ind-detail-col th:last-child{ text-align:right; }
 .ind-detail-col tr:last-child td{ border-bottom:none; }
 .ind-detail-col .tot-row td{ font-weight:800; background:var(--gris-050); border-top:1.5px solid var(--gris-200); }
 .ind-detail-col .cta-vacia{ padding:10px 12px; font-size:11.5px; color:var(--texto-suave); }
@@ -379,6 +393,10 @@ function toast(msg, type){
 function fmtMoney(n){
   if(n === null || n === undefined || isNaN(n)) return 'N/D';
   return '$ ' + Math.round(n).toLocaleString('es-CL');
+}
+function fmtNum(n){
+  if(n === null || n === undefined || isNaN(n)) return 'N/D';
+  return Math.round(n).toLocaleString('es-CL');
 }
 function fmtVeces(n){
   if(n === null || n === undefined || isNaN(n) || !isFinite(n)) return null;
@@ -953,6 +971,45 @@ const GRUPOS_INDICADOR = [
     desc:'Evidencia qué tan eficientemente la empresa utiliza sus activos para generar ingresos.' }
 ];
 
+/* --- Series históricas para comparar un indicador entre períodos (mes a mes / año contra año) --- */
+function periodosAscendente(periodos){
+  return [...periodos].sort((a,b)=> (a.id||'').localeCompare(b.id||''));
+}
+function serieIndicadoresPorPeriodo(periodosAsc){
+  return periodosAsc.map(p => ({ periodo: p.id, indicadores: calcularIndicadores(valoresPorCategoria(p.cuentas||[])) }));
+}
+function buscarValorIndicador(serie, periodoId, key){
+  const entry = serie.find(s=>s.periodo===periodoId);
+  if(!entry) return null;
+  const ind = entry.indicadores.find(i=>i.key===key);
+  return ind ? ind.valor : null;
+}
+function periodoAnioAnterior(periodoId){
+  const m = /^(\d{4})-(\d{2})$/.exec(periodoId || '');
+  if(!m) return null;
+  return (parseInt(m[1],10)-1) + '-' + m[2];
+}
+function calcularComparativos(serie, periodosAsc, key, periodoActualId){
+  const idx = periodosAsc.findIndex(p=>p.id===periodoActualId);
+  const actual = buscarValorIndicador(serie, periodoActualId, key);
+  const pct = (a,b) => (a===null||b===null||b===0) ? null : ((a-b)/Math.abs(b))*100;
+  let anteriorId = null, anterior = null;
+  if(idx > 0){ anteriorId = periodosAsc[idx-1].id; anterior = buscarValorIndicador(serie, anteriorId, key); }
+  const anioAntId = periodoAnioAnterior(periodoActualId);
+  const anioAntIdValido = (anioAntId && anioAntId !== anteriorId) ? anioAntId : null;
+  const anioAnt = anioAntIdValido ? buscarValorIndicador(serie, anioAntIdValido, key) : null;
+  return {
+    anterior: { id:anteriorId, valor:anterior, pct: pct(actual, anterior) },
+    anioAnterior: { id:anioAntIdValido, valor:anioAnt, pct: pct(actual, anioAnt) }
+  };
+}
+function badgeDelta(pct){
+  if(pct === null || pct === undefined || !isFinite(pct)) return '';
+  const dir = pct > 0.05 ? 'up' : (pct < -0.05 ? 'down' : 'flat');
+  const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
+  return `<div class="delta ${dir}">${arrow} ${Math.abs(pct).toFixed(1)}% vs período anterior</div>`;
+}
+
 function renderTabIndicadores(c){
   const cache = state.clienteCache[c.id] || { periodos: [] };
   const periodos = cache.periodos || [];
@@ -967,6 +1024,21 @@ function renderTabIndicadores(c){
   const vals = valoresPorCategoria(cuentas);
   const indicadores = calcularIndicadores(vals);
 
+  const periodosAsc = periodosAscendente(periodos);
+  const serie = serieIndicadoresPorPeriodo(periodosAsc);
+  const hayHistorial = periodosAsc.length > 1;
+
+  // Deja lista la data del gráfico del indicador abierto para que el bind la use tras insertar el canvas
+  if(state.indicadorAbierto && hayHistorial){
+    state._chartSerie = {
+      key: state.indicadorAbierto,
+      labels: periodosAsc.map(p=>p.id),
+      valores: periodosAsc.map(p=>buscarValorIndicador(serie, p.id, state.indicadorAbierto))
+    };
+  } else {
+    state._chartSerie = null;
+  }
+
   return `
   <div class="periodo-select">
     <label style="font-size:12.5px; font-weight:600; color:var(--texto-suave);">Período</label>
@@ -977,6 +1049,7 @@ function renderTabIndicadores(c){
     <button class="btn btn-secondary btn-sm" id="exportarIndicadoresExcel">📊 Exportar Excel</button>
     <button class="btn btn-secondary btn-sm" id="exportarIndicadoresPDF">📄 Exportar PDF</button>
   </div>
+  ${!hayHistorial ? `<div style="font-size:12px; color:var(--texto-suave); margin:-10px 0 16px;">Carga un segundo período (otro mes o el mismo mes del año anterior) para ver comparativos y gráficos de tendencia.</div>` : ''}
   ${GRUPOS_INDICADOR.map(g => {
     const delGrupo = indicadores.filter(i=>i.grupo === g.key);
     if(delGrupo.length === 0) return '';
@@ -987,17 +1060,23 @@ function renderTabIndicadores(c){
         <div class="gt"><h3>${g.label}</h3><p>${g.desc}</p></div>
       </div>
       <div class="ind-list">
-        ${delGrupo.map(ind => `
+        ${delGrupo.map(ind => {
+          const comp = hayHistorial ? calcularComparativos(serie, periodosAsc, ind.key, state.periodoIndicador) : null;
+          return `
           <div class="ind-card ${state.indicadorAbierto===ind.key?'open':''}" style="--gcolor:${g.color};">
             <div class="ind-card-head" data-ind="${ind.key}">
               <div><div class="lbl">${ind.label}</div><div class="sub">${ind.formula}</div></div>
               <div class="right">
-                <div class="val ${ind.valor===null?'nd':''}">${ind.valor===null ? 'N/D' : ind.textoValor}</div>
+                <div>
+                  <div class="val ${ind.valor===null?'nd':''}">${ind.valor===null ? 'N/D' : ind.textoValor}</div>
+                  ${comp ? badgeDelta(comp.anterior.pct) : ''}
+                </div>
                 <div class="chev">▾</div>
               </div>
             </div>
-            ${state.indicadorAbierto===ind.key ? renderDetalleIndicador(ind, cuentas, g.color) : ''}
-          </div>`).join('')}
+            ${state.indicadorAbierto===ind.key ? renderDetalleIndicador(ind, cuentas, g.color, comp, hayHistorial) : ''}
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
   }).join('')}
@@ -1116,7 +1195,7 @@ function bloqueDetalleColumna(titulo, categorias, cuentas, excluirCategorias){
   return { titulo, filas, total };
 }
 
-function renderDetalleIndicador(ind, cuentas, color){
+function renderDetalleIndicador(ind, cuentas, color, comp, hayHistorial){
   const colNum = bloqueDetalleColumna(ind.numerador.label, ind.numerador.categorias, cuentas, ind.numerador.excluir);
   const colDen = bloqueDetalleColumna(ind.denominador.label, ind.denominador.categorias, cuentas);
   const sinDatos = colNum.filas.length === 0 && colDen.filas.length === 0;
@@ -1127,22 +1206,41 @@ function renderDetalleIndicador(ind, cuentas, color){
       <h5>${esc(col.titulo)}</h5>
       ${col.filas.length === 0 ? `<div class="cta-vacia">Sin cuentas clasificadas aquí todavía.</div>` : `
       <table>
+        <thead><tr><th>Cuenta</th><th>CLP</th></tr></thead>
         <tbody>
-          ${col.filas.map(c=>`<tr><td>${esc(c.nombre)}</td><td style="text-align:right;">${fmtMoney(c.monto)}</td></tr>`).join('')}
-          <tr class="tot-row"><td>Total ${esc(col.titulo)}</td><td style="text-align:right;">${fmtMoney(col.total)}</td></tr>
+          ${col.filas.map(c=>`<tr><td>${esc(c.nombre)}</td><td>${fmtNum(c.monto)}</td></tr>`).join('')}
+          <tr class="tot-row"><td>Total ${esc(col.titulo)}</td><td>${fmtNum(col.total)}</td></tr>
         </tbody>
       </table>`}
     </div>`;
 
+  const comparativoItem = (titulo, item) => {
+    if(!item || !item.id) return '';
+    const val = item.valor === null ? 'N/D' : formatearValorIndicador(ind, item.valor);
+    const pctTxt = item.pct === null || item.pct === undefined ? '' : ` (${item.pct>=0?'▲':'▼'} ${Math.abs(item.pct).toFixed(1)}%)`;
+    return `<div class="tendencia-comp-item">${titulo} <span style="color:var(--texto-suave);">(${esc(item.id)})</span><strong>${val}${pctTxt}</strong></div>`;
+  };
+
   return `
   <div class="ind-detail" style="--gcolor:${color};">
     ${sinDatos ? `<div style="font-size:12.5px; color:var(--texto-suave); margin-bottom:12px;">Todavía no hay cuentas clasificadas para este indicador. Usa "Clasificar cuentas" para asignarlas.</div>` : ''}
+
+    ${hayHistorial ? `
+    <div class="tendencia-box">
+      <h5>Tendencia y comparativos</h5>
+      <div class="tendencia-chart-wrap"><canvas id="chart-${ind.key}"></canvas></div>
+      <div class="tendencia-comparativos">
+        ${comparativoItem('Período anterior', comp?.anterior)}
+        ${comparativoItem('Mismo período año anterior', comp?.anioAnterior)}
+      </div>
+    </div>` : ''}
+
     <div class="ind-detail-cols">
       ${tablaCol(colNum)}
       ${tablaCol(colDen)}
     </div>
     <div class="ind-formula-bar">
-      <div class="f">${esc(ind.numerador.label)} (${fmtMoney(colNum.total)}) ${signo} ${esc(ind.denominador.label)} (${fmtMoney(colDen.total)})</div>
+      <div class="f">${esc(ind.numerador.label)} (${fmtNum(colNum.total)} CLP) ${signo} ${esc(ind.denominador.label)} (${fmtNum(colDen.total)} CLP)</div>
       <div class="r">${ind.valor===null ? 'N/D' : ind.textoValor}</div>
     </div>
     <div class="ind-detail-actions">
@@ -1150,6 +1248,14 @@ function renderDetalleIndicador(ind, cuentas, color){
       <button class="btn btn-secondary btn-sm" data-exp-ind-pdf="${ind.key}">📄 PDF</button>
     </div>
   </div>`;
+}
+
+/* Da formato al valor de un indicador según su tipo (veces / % / $), usado para los comparativos */
+function formatearValorIndicador(ind, valor){
+  if(valor === null || valor === undefined) return 'N/D';
+  if(ind.key === 'capital') return fmtMoney(valor);
+  if(ind.key === 'roe' || ind.key === 'roa') return fmtPct(valor);
+  return fmtVeces(valor);
 }
 
 /* ---- bind ficha (tabs, guardar, cargas, borrar archivo, indicadores) ---- */
@@ -1216,7 +1322,36 @@ function bindModalFicha(){
     document.querySelectorAll('[data-exp-ind-pdf]').forEach(btn=>{
       btn.addEventListener('click', (e)=>{ e.stopPropagation(); exportarUnIndicadorPDF(btn.getAttribute('data-exp-ind-pdf')); });
     });
+    dibujarGraficoTendencia();
   }
+}
+
+let chartTendenciaActual = null;
+function dibujarGraficoTendencia(){
+  if(chartTendenciaActual){ chartTendenciaActual.destroy(); chartTendenciaActual = null; }
+  const info = state._chartSerie;
+  if(!info) return;
+  const canvas = document.getElementById('chart-' + info.key);
+  if(!canvas || typeof Chart === 'undefined') return;
+  const indDef = { key: info.key };
+  chartTendenciaActual = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels: info.labels,
+      datasets:[{
+        data: info.valores,
+        borderColor: '#153365',
+        backgroundColor: 'rgba(21,51,101,.08)',
+        pointBackgroundColor:'#153365',
+        tension:.3, fill:true, spanGaps:true
+      }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:(ctx)=> ctx.parsed.y===null ? 'N/D' : formatearValorIndicador(indDef, ctx.parsed.y) } } },
+      scales:{ y:{ ticks:{ font:{ size:10 } } }, x:{ ticks:{ font:{ size:10 } } } }
+    }
+  });
 }
 
 async function guardarFicha(){
@@ -1671,11 +1806,11 @@ function exportarUnIndicadorExcel(key){
     [ind.label],
     [c.nombre || '', 'Período: ' + periodo.id],
     [],
-    [colNum.titulo], ['Cuenta','Monto'],
+    [colNum.titulo], ['Cuenta','CLP'],
     ...colNum.filas.map(f=>[f.nombre, f.monto]),
     ['Total ' + colNum.titulo, colNum.total],
     [],
-    [colDen.titulo], ['Cuenta','Monto'],
+    [colDen.titulo], ['Cuenta','CLP'],
     ...colDen.filas.map(f=>[f.nombre, f.monto]),
     ['Total ' + colDen.titulo, colDen.total],
     [],
@@ -1709,16 +1844,16 @@ function exportarUnIndicadorPDF(key){
   doc.text(`${c.nombre || ''} — Período ${periodo.id}`, 14, 20);
   doc.autoTable({
     startY: 34,
-    head:[[colNum.titulo,'Monto']],
-    body: [...colNum.filas.map(f=>[f.nombre, fmtMoney(f.monto)]), [{content:'Total ' + colNum.titulo, styles:{fontStyle:'bold'}}, {content:fmtMoney(colNum.total), styles:{fontStyle:'bold'}}]],
-    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, margin:{left:14, right:14}
+    head:[[colNum.titulo,'CLP']],
+    body: [...colNum.filas.map(f=>[f.nombre, fmtNum(f.monto)]), [{content:'Total ' + colNum.titulo, styles:{fontStyle:'bold'}}, {content:fmtNum(colNum.total), styles:{fontStyle:'bold'}}]],
+    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, columnStyles:{1:{halign:'right'}}, margin:{left:14, right:14}
   });
   let y = doc.lastAutoTable.finalY + 8;
   doc.autoTable({
     startY: y,
-    head:[[colDen.titulo,'Monto']],
-    body: [...colDen.filas.map(f=>[f.nombre, fmtMoney(f.monto)]), [{content:'Total ' + colDen.titulo, styles:{fontStyle:'bold'}}, {content:fmtMoney(colDen.total), styles:{fontStyle:'bold'}}]],
-    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, margin:{left:14, right:14}
+    head:[[colDen.titulo,'CLP']],
+    body: [...colDen.filas.map(f=>[f.nombre, fmtNum(f.monto)]), [{content:'Total ' + colDen.titulo, styles:{fontStyle:'bold'}}, {content:fmtNum(colDen.total), styles:{fontStyle:'bold'}}]],
+    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, columnStyles:{1:{halign:'right'}}, margin:{left:14, right:14}
   });
   y = doc.lastAutoTable.finalY + 12;
   doc.setFillColor(21,51,101); doc.roundedRect(14, y, 182, 18, 2, 2, 'F');
