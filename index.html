@@ -326,12 +326,16 @@ const CATEGORIAS_CUENTA = [
   { key: '', label: '— Sin clasificar —' },
   { key: 'activo_circulante', label: 'Activo Circulante' },
   { key: 'existencias', label: 'Existencias' },
+  { key: 'activo_fijo', label: 'Activo Fijo / Otros Activos' },
   { key: 'pasivo_circulante', label: 'Pasivo Circulante' },
-  { key: 'total_activo', label: 'Total Activos' },
-  { key: 'total_pasivo', label: 'Total Pasivos' },
+  { key: 'pasivo_otro', label: 'Pasivo Largo Plazo / Otros Pasivos' },
+  { key: 'total_activo', label: 'Total Activos (directo)' },
+  { key: 'total_pasivo', label: 'Total Pasivos (directo)' },
   { key: 'patrimonio', label: 'Patrimonio' },
-  { key: 'ventas', label: 'Ventas / Ingresos' },
-  { key: 'utilidad', label: 'Utilidad del Ejercicio' },
+  { key: 'ventas', label: 'Ventas' },
+  { key: 'ingresos_otros', label: 'Otros Ingresos' },
+  { key: 'gastos', label: 'Gastos / Costos' },
+  { key: 'utilidad', label: 'Utilidad del Ejercicio (directo)' },
   { key: 'ignorar', label: 'Ignorar' }
 ];
 
@@ -885,6 +889,10 @@ function renderTabArchivos(c){
         <input type="file" data-carga="${cat.key}" accept=".xlsx,.xls,.csv,.pdf">
       </label>`).join('')}
   </div>
+  <div style="margin: -10px 0 22px; font-size:12.5px; color:var(--texto-suave); display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <span>El sistema reconoce automáticamente el <strong>Balance de 8 columnas</strong>. ¿Tu balance viene en otro formato?</span>
+    <button class="btn btn-secondary btn-sm" id="btnDescargarPlantilla">📥 Descargar plantilla de carga</button>
+  </div>
   ${CATEGORIAS_ARCHIVO.map(cat => {
     const archivos = activos.filter(a=>a.tipo === cat.key).sort((a,b)=> (b.fecha?.seconds||0) - (a.fecha?.seconds||0));
     return `
@@ -947,12 +955,17 @@ function valoresPorCategoria(cuentas){
     if(filtradas.length === 0) return null;
     return filtradas.reduce((acc,c)=> acc + (parseFloat(c.monto)||0), 0);
   };
+  const sumaOpcional = (...keys) => {
+    const partes = keys.map(k=>sum(k)).filter(v=>v !== null);
+    if(partes.length === 0) return null;
+    return partes.reduce((a,b)=>a+b, 0);
+  };
   return {
     activo_circulante: sum('activo_circulante'),
     existencias: sum('existencias'),
     pasivo_circulante: sum('pasivo_circulante'),
-    total_activo: sum('total_activo'),
-    total_pasivo: sum('total_pasivo'),
+    total_activo: sumaOpcional('total_activo', 'activo_circulante', 'activo_fijo'),
+    total_pasivo: sumaOpcional('total_pasivo', 'pasivo_circulante', 'pasivo_otro'),
     patrimonio: sum('patrimonio'),
     ventas: sum('ventas'),
     utilidad: sum('utilidad')
@@ -984,7 +997,7 @@ function calcularIndicadores(v){
   {
     const val = (v.total_pasivo!==null && v.total_activo) ? v.total_pasivo / v.total_activo : null;
     list.push({ key:'endeud_total', label:'Endeudamiento total', valor: val, textoValor: fmtVeces(val),
-      formula:'Total Pasivos ÷ Total Activos', cuentasClave:['total_pasivo','total_activo'] });
+      formula:'Total Pasivos ÷ Total Activos', cuentasClave:['total_pasivo','total_activo','pasivo_circulante','pasivo_otro','activo_circulante','activo_fijo'] });
   }
   // Endeudamiento patrimonial
   {
@@ -1002,13 +1015,13 @@ function calcularIndicadores(v){
   {
     const val = (v.utilidad!==null && v.total_activo) ? v.utilidad / v.total_activo : null;
     list.push({ key:'roa', label:'Rentabilidad del activo (ROA)', valor: val, textoValor: fmtPct(val),
-      formula:'Utilidad del Ejercicio ÷ Total Activos', cuentasClave:['utilidad','total_activo'] });
+      formula:'Utilidad del Ejercicio ÷ Total Activos', cuentasClave:['utilidad','total_activo','activo_circulante','activo_fijo'] });
   }
   // Rotación de activos
   {
     const val = (v.ventas!==null && v.total_activo) ? v.ventas / v.total_activo : null;
     list.push({ key:'rotacion', label:'Rotación de activos', valor: val, textoValor: fmtVeces(val),
-      formula:'Ventas ÷ Total Activos', cuentasClave:['ventas','total_activo'] });
+      formula:'Ventas ÷ Total Activos', cuentasClave:['ventas','total_activo','activo_circulante','activo_fijo'] });
   }
   return list;
 }
@@ -1058,6 +1071,8 @@ function bindModalFicha(){
     document.querySelectorAll('[data-carga]').forEach(inp=>{
       inp.addEventListener('change', (e)=> subirArchivo(e.target.getAttribute('data-carga'), e.target.files[0]));
     });
+    const btnPlantilla = document.getElementById('btnDescargarPlantilla');
+    if(btnPlantilla) btnPlantilla.addEventListener('click', descargarPlantillaCarga);
     document.querySelectorAll('[data-borrar-archivo]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const id = btn.getAttribute('data-borrar-archivo');
@@ -1152,8 +1167,160 @@ function subirArchivo(tipo, file){
     }
   }).catch(err=>{
     console.error(err);
-    toast('No se pudo subir el archivo.', 'err');
+    toast('No se pudo subir el archivo: ' + (err.code || err.message || 'error desconocido'), 'err');
   });
+}
+
+/* --- Normaliza texto para comparar encabezados sin tildes/mayúsculas --- */
+function normTxt(s){
+  return String(s ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function aNumero(v){
+  if(typeof v === 'number'){
+    // Corrige un artefacto común en balances exportados: un separador de miles
+    // que quedó interpretado como decimal (ej: 95.921 realmente es $95.921 = 95921)
+    if(!Number.isInteger(v)){
+      const dec = String(v).split('.')[1] || '';
+      if(dec.length === 3) return Math.round(v * 1000);
+    }
+    return v;
+  }
+  if(v === null || v === undefined || v === '') return 0;
+  let s = String(v).trim();
+  if(s === '') return 0;
+  const tieneComa = s.includes(',');
+  const tienePunto = s.includes('.');
+  if(tieneComa && tienePunto){
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if(tieneComa){
+    const partes = s.split(',');
+    if(partes.length === 2 && partes[1].length <= 2) s = s.replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if(tienePunto){
+    const partes = s.split('.');
+    if(!(partes.length === 2 && partes[1].length <= 2)) s = s.replace(/\./g, '');
+  }
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+/* --- Detecta en qué fila están los encabezados y qué formato es --- */
+function detectarEncabezado(rows){
+  for(let i = 0; i < Math.min(rows.length, 15); i++){
+    const fila = (rows[i] || []).map(normTxt);
+    if(fila.length === 0) continue;
+
+    // Formato "Balance 8 columnas" (Chile): Cuenta, Descripción, Debe, Haber, Deudor, Acreedor, Activo, Pasivo, Perdida, Ganancia
+    const iCuenta = fila.findIndex(c=>c === 'cuenta' || c.startsWith('cuenta'));
+    const iDescripcion = fila.findIndex(c=>c.includes('descripcion'));
+    const iActivo = fila.findIndex(c=>c.includes('activo'));
+    const iPasivo = fila.findIndex(c=>c.includes('pasivo'));
+    const iPerdida = fila.findIndex(c=>c.includes('perdida'));
+    const iGanancia = fila.findIndex(c=>c.includes('ganancia'));
+    if(iCuenta !== -1 && iDescripcion !== -1 && iActivo !== -1 && iPasivo !== -1 && (iPerdida !== -1 || iGanancia !== -1)){
+      return { formato:'ocho_columnas', filaIni:i+1, iCuenta, iDescripcion, iActivo, iPasivo, iPerdida, iGanancia };
+    }
+
+    // Formato plantilla propia: Categoría, Cuenta, Monto
+    const iCategoria = fila.findIndex(c=>c.includes('categoria'));
+    const iMontoPlant = fila.findIndex(c=>c.includes('monto'));
+    if(iCategoria !== -1 && iMontoPlant !== -1){
+      const iCuentaPlant = fila.findIndex(c=>c.includes('cuenta') || c.includes('detalle'));
+      return { formato:'plantilla', filaIni:i+1, iCategoria, iCuenta: iCuentaPlant, iMonto: iMontoPlant };
+    }
+
+    // Formato genérico: Cuenta/Concepto/Detalle + Monto/Saldo/Valor/Total
+    const iCtaGen = fila.findIndex(c=>c.includes('cuenta') || c.includes('concepto') || c.includes('detalle'));
+    const iMontoGen = fila.findIndex(c=>c.includes('monto') || c.includes('saldo') || c.includes('valor') || c.includes('total'));
+    if(iCtaGen !== -1 && iMontoGen !== -1 && iCtaGen !== iMontoGen){
+      return { formato:'generico', filaIni:i+1, iCuenta: iCtaGen, iMonto: iMontoGen };
+    }
+  }
+  return null;
+}
+
+/* --- Clasifica una cuenta del Balance 8 columnas según el prefijo de su código --- */
+function categoriaPorCodigo(codigo, descripcion){
+  const cod = String(codigo || '').trim();
+  const desc = normTxt(descripcion);
+  if(/^1\.1/.test(cod)){
+    if(/mercader|existenc|inventario/.test(desc)) return 'existencias';
+    return 'activo_circulante';
+  }
+  if(/^1\./.test(cod)) return 'activo_fijo';
+  if(/^2\.4/.test(cod)) return 'patrimonio';
+  if(/^2\.[123]/.test(cod)) return 'pasivo_circulante';
+  if(/^2\./.test(cod)) return 'pasivo_otro';
+  if(/^3\.1/.test(cod)) return 'ventas';
+  if(/^3\./.test(cod)) return 'ingresos_otros';
+  if(/^4\./.test(cod)) return 'gastos';
+  return '';
+}
+
+/* --- Parser del formato "Balance 8 columnas" (código de cuenta define la categoría) --- */
+function parsearOchoColumnas(rows, det){
+  const cuentas = [];
+  // Si el encabezado de "Pérdida" vino con la codificación dañada, se asume que está
+  // inmediatamente antes de la columna "Ganancia" (orden estándar del balance de 8 columnas).
+  const iPerdida = det.iPerdida !== -1 ? det.iPerdida : (det.iGanancia !== -1 ? det.iGanancia - 1 : -1);
+  for(let i = det.filaIni; i < rows.length; i++){
+    const fila = rows[i];
+    if(!fila || fila.length === 0) continue;
+    const codigo = String(fila[det.iCuenta] ?? '').trim();
+    const descripcion = String(fila[det.iDescripcion] ?? '').trim();
+    if(!codigo || !/^\d/.test(codigo)) continue; // ignora filas de totales/encabezados intermedios
+    const activo = aNumero(fila[det.iActivo]);
+    const pasivo = aNumero(fila[det.iPasivo]);
+    const perdida = iPerdida !== -1 ? aNumero(fila[iPerdida]) : 0;
+    const ganancia = det.iGanancia !== -1 ? aNumero(fila[det.iGanancia]) : 0;
+    const cat = categoriaPorCodigo(codigo, descripcion);
+    let monto = 0;
+    if(cat === 'ventas' || cat === 'ingresos_otros') monto = ganancia - perdida;
+    else if(cat === 'gastos') monto = perdida - ganancia; // valor positivo = gasto real
+    else if(cat === 'pasivo_circulante' || cat === 'pasivo_otro' || cat === 'patrimonio') monto = pasivo - activo; // saldo normal acreedor
+    else monto = activo - pasivo; // activo_circulante / activo_fijo / existencias: saldo normal deudor
+    if(activo === 0 && pasivo === 0 && perdida === 0 && ganancia === 0) continue;
+    cuentas.push({ nombre: descripcion || codigo, codigo, monto, categoria: cat, origen:'balance8col' });
+  }
+  // Calcula la utilidad del ejercicio como Ingresos - Gastos y la agrega como una cuenta consolidada
+  const ingresos = cuentas.filter(c=>c.categoria==='ventas'||c.categoria==='ingresos_otros').reduce((a,c)=>a+c.monto,0);
+  const gastos = cuentas.filter(c=>c.categoria==='gastos').reduce((a,c)=>a+c.monto,0);
+  cuentas.push({ nombre:'Utilidad del Ejercicio (calculada)', codigo:'', monto: ingresos - gastos, categoria:'utilidad', origen:'balance8col' });
+  return cuentas;
+}
+
+/* --- Parser de la plantilla propia (Categoría | Cuenta | Monto) --- */
+function parsearPlantilla(rows, det){
+  const mapaCategorias = {};
+  CATEGORIAS_CUENTA.forEach(c=>{ if(c.key) mapaCategorias[normTxt(c.label)] = c.key; });
+  const cuentas = [];
+  for(let i = det.filaIni; i < rows.length; i++){
+    const fila = rows[i];
+    if(!fila || fila.length === 0) continue;
+    const catTexto = normTxt(fila[det.iCategoria]);
+    const monto = aNumero(fila[det.iMonto]);
+    const nombre = det.iCuenta !== -1 ? String(fila[det.iCuenta] ?? '').trim() : '';
+    if(!catTexto || (monto === 0 && !nombre)) continue;
+    const categoria = mapaCategorias[catTexto] || '';
+    cuentas.push({ nombre: nombre || (CATEGORIAS_CUENTA.find(c=>c.key===categoria)?.label || catTexto), monto, categoria, origen:'plantilla' });
+  }
+  return cuentas;
+}
+
+/* --- Parser genérico: 2 columnas, requiere clasificación manual posterior --- */
+function parsearGenerico(rows, det, cuentasExistentes){
+  const cuentas = [];
+  for(let i = det.filaIni; i < rows.length; i++){
+    const fila = rows[i];
+    if(!fila || fila.length === 0) continue;
+    const nombre = String(fila[det.iCuenta] ?? '').trim();
+    const monto = aNumero(fila[det.iMonto]);
+    if(!nombre || (monto === 0 && fila[det.iMonto] === '')) continue;
+    const previa = cuentasExistentes.find(c=>c.nombre === nombre);
+    cuentas.push({ nombre, monto, categoria: previa ? previa.categoria : sugerirCategoria(nombre), origen:'generico' });
+  }
+  return cuentas;
 }
 
 function parsearYGuardarBalance(clienteId, file, tipo){
@@ -1166,47 +1333,83 @@ function parsearYGuardarBalance(clienteId, file, tipo){
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
 
-        // Detectar fila de encabezado y columnas de cuenta / monto
-        let filaIni = 0, colCuenta = 0, colMonto = 1;
-        for(let i=0; i<Math.min(rows.length, 10); i++){
-          const fila = rows[i].map(c=>String(c).toLowerCase());
-          const ic = fila.findIndex(c=>c.includes('cuenta') || c.includes('concepto') || c.includes('detalle'));
-          const im = fila.findIndex(c=>c.includes('monto') || c.includes('saldo') || c.includes('valor') || c.includes('total'));
-          if(ic !== -1){ filaIni = i+1; colCuenta = ic; colMonto = im !== -1 ? im : ic+1; break; }
-        }
-        const cuentasExistentes = await obtenerCuentasPrevias(clienteId);
-
-        const cuentas = [];
-        for(let i = filaIni; i < rows.length; i++){
-          const fila = rows[i];
-          if(!fila || fila.length === 0) continue;
-          const nombre = String(fila[colCuenta] ?? '').trim();
-          let monto = fila[colMonto];
-          if(typeof monto === 'string') monto = parseFloat(monto.replace(/\./g,'').replace(',', '.'));
-          if(!nombre || isNaN(monto)) continue;
-          const previa = cuentasExistentes.find(c=>c.nombre === nombre);
-          cuentas.push({ nombre, monto, categoria: previa ? previa.categoria : sugerirCategoria(nombre), origen: tipo });
+        const det = detectarEncabezado(rows);
+        if(!det){
+          toast('No reconocí el formato de este archivo. Descarga la plantilla en la pestaña Archivos y súbela con ese formato para que los indicadores se calculen igual.', 'err');
+          resolve();
+          return;
         }
 
-        if(cuentas.length === 0){ resolve(); return; }
+        let cuentas = [];
+        if(det.formato === 'ocho_columnas') cuentas = parsearOchoColumnas(rows, det);
+        else if(det.formato === 'plantilla') cuentas = parsearPlantilla(rows, det);
+        else {
+          const cuentasExistentes = await obtenerCuentasPrevias(clienteId);
+          cuentas = parsearGenerico(rows, det, cuentasExistentes);
+        }
+
+        if(cuentas.length === 0){
+          toast('El archivo se reconoció pero no se encontraron cuentas con montos. Revisa el archivo o usa la plantilla de carga.', 'err');
+          resolve();
+          return;
+        }
+
+        if(det.formato === 'ocho_columnas'){
+          const sum = (cat)=>cuentas.filter(c=>c.categoria===cat).reduce((a,c)=>a+c.monto,0);
+          const totalActivo = sum('activo_circulante') + sum('activo_fijo');
+          const totalPasivoPatrimUtil = sum('pasivo_circulante') + sum('pasivo_otro') + sum('patrimonio') + sum('utilidad');
+          const base = Math.max(Math.abs(totalActivo), 1);
+          const diffPct = Math.abs(totalActivo - totalPasivoPatrimUtil) / base;
+          if(diffPct > 0.02){
+            toast('Aviso: el Activo detectado no cuadra exactamente con Pasivo + Patrimonio + Utilidad (diferencia ' + (diffPct*100).toFixed(1) + '%). Revisa la clasificación de cuentas antes de confiar en los indicadores.', 'err');
+          }
+        }
 
         const periodo = prompt('¿A qué período (ej: 2025-12) corresponde este archivo?', new Date().toISOString().slice(0,7)) || new Date().toISOString().slice(0,7);
         const ref = db.collection('clientes').doc(clienteId).collection('periodos').doc(periodo);
         const prevSnap = await ref.get();
-        let cuentasFinal = cuentas;
+        const cuentasNuevas = cuentas.map(c=>({...c, origenTipo: tipo}));
+        let cuentasFinal = cuentasNuevas;
         if(prevSnap.exists){
-          const prevCuentas = (prevSnap.data().cuentas || []).filter(c=>c.origen !== tipo);
-          cuentasFinal = prevCuentas.concat(cuentas);
+          const previas = prevSnap.data().cuentas || [];
+          cuentasFinal = previas.filter(c=>c.origenTipo !== tipo).concat(cuentasNuevas);
         }
         await ref.set({ cuentas: cuentasFinal, actualizadoEn: firebase.firestore.FieldValue.serverTimestamp() }, { merge:true });
         state.periodoIndicador = periodo;
-        toast('Cuentas detectadas: ' + cuentas.length + '. Revísalas en "Clasificar cuentas".', 'ok');
+        const detectadoTxt = det.formato === 'ocho_columnas' ? 'Balance de 8 columnas (clasificado automáticamente)' : det.formato === 'plantilla' ? 'Plantilla de carga (clasificado automáticamente)' : 'Formato genérico (revisa la clasificación)';
+        toast(`Cuentas detectadas: ${cuentas.length}. Formato: ${detectadoTxt}.`, 'ok');
         resolve();
       }catch(err){ reject(err); }
     };
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
+}
+
+/* --- Genera y descarga la plantilla de carga masiva --- */
+function descargarPlantillaCarga(){
+  const filasDatos = CATEGORIAS_CUENTA.filter(c=>c.key).map(c=>[c.label, '', 0]);
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['Categoría', 'Cuenta (opcional, referencial)', 'Monto'],
+    ...filasDatos
+  ]);
+  ws['!cols'] = [{wch:26},{wch:34},{wch:16}];
+  const wsInstr = XLSX.utils.aoa_to_sheet([
+    ['Instrucciones para usar esta plantilla'],
+    [''],
+    ['1. No cambies el texto de la columna "Categoría" — el sistema la usa para calcular los indicadores.'],
+    ['2. En "Cuenta" puedes escribir un detalle o dejarlo en blanco.'],
+    ['3. En "Monto" escribe el valor en pesos, sin puntos ni signos ($).'],
+    ['4. Si una categoría no aplica a esta empresa, puedes dejar el monto en 0.'],
+    ['5. Guarda el archivo y súbelo con el botón "Cargar Balance" o "EE.RR." según corresponda.'],
+    [''],
+    ['Novel — Consultoría & Capacitación Financiera & Tributaria']
+  ]);
+  wsInstr['!cols'] = [{wch:80}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones');
+  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+  XLSX.writeFile(wb, 'Plantilla_carga_balance_Novel.xlsx');
 }
 
 async function obtenerCuentasPrevias(clienteId){
@@ -1422,7 +1625,7 @@ function renderVistaUsuarios(){
         <td>${esc(u.email)}</td>
         <td><span class="badge badge-role">${u.rol==='admin'?'Administrador':'Contador'}</span></td>
         <td class="row-actions">
-          ${u.id !== state.user.uid ? `<button class="icon-btn" data-cambiar-rol="${u.id}" title="Cambiar rol">🔁</button>` : ''}
+          <button class="icon-btn" data-cambiar-rol="${u.id}" title="Cambiar rol">🔁</button>
         </td>
       </tr>`).join('')}
   </tbody></table></div>`;
