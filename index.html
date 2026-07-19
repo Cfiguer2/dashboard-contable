@@ -214,18 +214,46 @@ tr.row-click:hover td{ background:var(--azul-050); }
 .file-row-empty{ font-size:12.5px; color:var(--texto-suave); padding:8px 2px; }
 
 /* indicadores */
-.ind-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-bottom:20px; }
-.ind-card{ background:var(--gris-050); border:1px solid var(--gris-200); border-radius:10px; padding:16px; cursor:pointer; transition:border-color .15s, transform .1s; }
-.ind-card:hover{ border-color:var(--azul); transform:translateY(-1px); }
-.ind-card .lbl{ font-size:11.5px; color:var(--texto-suave); font-weight:600; text-transform:uppercase; letter-spacing:.3px; margin-bottom:6px; }
-.ind-card .val{ font-size:22px; font-weight:700; color:var(--azul); }
-.ind-card .val small{ font-size:12px; font-weight:600; color:var(--gris); margin-left:4px; }
-.ind-card .val.nd{ color:var(--gris); font-size:15px; font-weight:600; }
-.ind-detail{ background:#fff; border:1px solid var(--gris-200); border-radius:10px; padding:16px 18px; margin-top:-4px; margin-bottom:20px; }
-.ind-detail .formula{ font-size:12.5px; color:var(--texto-suave); margin-bottom:10px; font-family: 'Courier New', monospace; }
-.ind-detail table{ font-size:12.5px; }
-.ind-detail th, .ind-detail td{ padding:7px 10px; }
-.periodo-select{ display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+.grupo-ind{ margin-bottom:26px; }
+.grupo-ind-head{ display:flex; align-items:flex-start; gap:12px; margin-bottom:12px; }
+.grupo-ind-head .gi{ width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0; }
+.grupo-ind-head .gt h3{ margin:0 0 2px; font-size:15px; color:var(--azul); }
+.grupo-ind-head .gt p{ margin:0; font-size:12px; color:var(--texto-suave); line-height:1.4; max-width:520px; }
+
+.ind-list{ display:flex; flex-direction:column; gap:8px; }
+.ind-card{
+  background:#fff; border:1px solid var(--gris-200); border-left:4px solid var(--gcolor, var(--azul));
+  border-radius:10px; overflow:hidden; transition:border-color .15s;
+}
+.ind-card.open{ border-color:var(--gcolor, var(--azul)); box-shadow: var(--sombra); }
+.ind-card-head{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 16px; cursor:pointer; }
+.ind-card-head:hover{ background:var(--gris-050); }
+.ind-card-head .lbl{ font-size:13px; font-weight:700; color:var(--texto); }
+.ind-card-head .sub{ font-size:11px; color:var(--texto-suave); margin-top:2px; }
+.ind-card-head .right{ display:flex; align-items:center; gap:12px; flex-shrink:0; }
+.ind-card-head .val{ font-size:19px; font-weight:800; color:var(--gcolor, var(--azul)); text-align:right; }
+.ind-card-head .val.nd{ color:var(--gris); font-size:12.5px; font-weight:600; }
+.ind-card-head .chev{ color:var(--texto-suave); font-size:12px; transition:transform .15s; }
+.ind-card.open .chev{ transform:rotate(180deg); }
+
+.ind-detail{ border-top:1px solid var(--gris-200); background:var(--gris-050); padding:18px 18px 20px; animation:expandIn .18s ease; }
+@keyframes expandIn{ from{ opacity:0; transform:translateY(-4px);} to{ opacity:1; transform:translateY(0);} }
+.ind-detail-cols{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+.ind-detail-col{ background:#fff; border:1px solid var(--gris-200); border-radius:9px; overflow:hidden; }
+.ind-detail-col h5{ margin:0; padding:9px 12px; font-size:11.5px; text-transform:uppercase; letter-spacing:.3px; color:#fff; background:var(--gcolor, var(--azul)); }
+.ind-detail-col table{ width:100%; font-size:12px; border-collapse:collapse; }
+.ind-detail-col td{ padding:6px 12px; border-bottom:1px solid var(--gris-100); }
+.ind-detail-col tr:last-child td{ border-bottom:none; }
+.ind-detail-col .tot-row td{ font-weight:800; background:var(--gris-050); border-top:1.5px solid var(--gris-200); }
+.ind-detail-col .cta-vacia{ padding:10px 12px; font-size:11.5px; color:var(--texto-suave); }
+.ind-formula-bar{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  background:var(--azul); color:#fff; border-radius:9px; padding:12px 16px; font-size:13px;
+}
+.ind-formula-bar .f{ font-family:'Courier New', monospace; font-size:12.5px; opacity:.92; }
+.ind-formula-bar .r{ font-size:18px; font-weight:800; }
+.ind-detail-actions{ display:flex; gap:8px; margin-top:12px; }
+.periodo-select{ display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
 
 /* mapeo cuentas */
 .map-table td{ padding:6px 10px; }
@@ -262,7 +290,7 @@ tr.row-click:hover td{ background:var(--azul-050); }
 @media (max-width: 880px){
   .sidebar{ display:none; }
   .main{ margin-left:0; }
-  .grid2, .botonera, .ind-grid{ grid-template-columns:1fr; }
+  .grid2, .botonera, .ind-detail-cols{ grid-template-columns:1fr; }
 }
 </style>
 </head>
@@ -324,11 +352,11 @@ const CATEGORIAS_ARCHIVO = [
 
 const CATEGORIAS_CUENTA = [
   { key: '', label: '— Sin clasificar —' },
-  { key: 'activo_circulante', label: 'Activo Circulante' },
+  { key: 'activo_circulante', label: 'Activo Corriente' },
   { key: 'existencias', label: 'Existencias' },
-  { key: 'activo_fijo', label: 'Activo Fijo / Otros Activos' },
-  { key: 'pasivo_circulante', label: 'Pasivo Circulante' },
-  { key: 'pasivo_otro', label: 'Pasivo Largo Plazo / Otros Pasivos' },
+  { key: 'activo_fijo', label: 'Activo No Corriente / Otros Activos' },
+  { key: 'pasivo_circulante', label: 'Pasivo Corriente' },
+  { key: 'pasivo_otro', label: 'Pasivo No Corriente / Otros Pasivos' },
   { key: 'total_activo', label: 'Total Activos (directo)' },
   { key: 'total_pasivo', label: 'Total Pasivos (directo)' },
   { key: 'patrimonio', label: 'Patrimonio' },
@@ -914,6 +942,17 @@ function renderTabArchivos(c){
   `;
 }
 
+const GRUPOS_INDICADOR = [
+  { key:'liquidez', label:'Liquidez', icon:'💧', color:'#153365',
+    desc:'Mide la disponibilidad de recursos líquidos de la empresa para afrontar sus obligaciones de corto plazo.' },
+  { key:'endeudamiento', label:'Endeudamiento', icon:'⚖️', color:'#b45309',
+    desc:'Mide la capacidad de la empresa para hacer frente a sus obligaciones de pago con terceros.' },
+  { key:'rentabilidad', label:'Rentabilidad', icon:'📈', color:'#1c7c4c',
+    desc:'Mide la capacidad de generación de utilidad de la empresa.' },
+  { key:'gestion', label:'Gestión', icon:'🔄', color:'#5b3fa0',
+    desc:'Evidencia qué tan eficientemente la empresa utiliza sus activos para generar ingresos.' }
+];
+
 function renderTabIndicadores(c){
   const cache = state.clienteCache[c.id] || { periodos: [] };
   const periodos = cache.periodos || [];
@@ -935,17 +974,33 @@ function renderTabIndicadores(c){
       ${periodos.map(p=>`<option value="${p.id}" ${p.id===state.periodoIndicador?'selected':''}>${esc(p.id)}</option>`).join('')}
     </select>
     <button class="btn btn-secondary btn-sm" id="btnMapearCuentas">Clasificar cuentas</button>
-    <button class="btn btn-secondary btn-sm" id="exportarIndicadoresExcel">Exportar Excel</button>
-    <button class="btn btn-secondary btn-sm" id="exportarIndicadoresPDF">Exportar PDF</button>
+    <button class="btn btn-secondary btn-sm" id="exportarIndicadoresExcel">📊 Exportar Excel</button>
+    <button class="btn btn-secondary btn-sm" id="exportarIndicadoresPDF">📄 Exportar PDF</button>
   </div>
-  <div class="ind-grid">
-    ${indicadores.map(ind => `
-      <div class="ind-card" data-ind="${ind.key}">
-        <div class="lbl">${ind.label}</div>
-        <div class="val ${ind.valor===null?'nd':''}">${ind.valor===null ? 'N/D — falta clasificar cuentas' : ind.textoValor}</div>
-      </div>`).join('')}
-  </div>
-  ${state.indicadorAbierto ? renderDetalleIndicador(indicadores.find(i=>i.key===state.indicadorAbierto), cuentas) : ''}
+  ${GRUPOS_INDICADOR.map(g => {
+    const delGrupo = indicadores.filter(i=>i.grupo === g.key);
+    if(delGrupo.length === 0) return '';
+    return `
+    <div class="grupo-ind">
+      <div class="grupo-ind-head">
+        <div class="gi" style="background:${g.color}1a; color:${g.color};">${g.icon}</div>
+        <div class="gt"><h3>${g.label}</h3><p>${g.desc}</p></div>
+      </div>
+      <div class="ind-list">
+        ${delGrupo.map(ind => `
+          <div class="ind-card ${state.indicadorAbierto===ind.key?'open':''}" style="--gcolor:${g.color};">
+            <div class="ind-card-head" data-ind="${ind.key}">
+              <div><div class="lbl">${ind.label}</div><div class="sub">${ind.formula}</div></div>
+              <div class="right">
+                <div class="val ${ind.valor===null?'nd':''}">${ind.valor===null ? 'N/D' : ind.textoValor}</div>
+                <div class="chev">▾</div>
+              </div>
+            </div>
+            ${state.indicadorAbierto===ind.key ? renderDetalleIndicador(ind, cuentas, g.color) : ''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('')}
   `;
 }
 
@@ -961,10 +1016,10 @@ function valoresPorCategoria(cuentas){
     return partes.reduce((a,b)=>a+b, 0);
   };
   return {
-    activo_circulante: sum('activo_circulante'),
+    activo_circulante: sumaOpcional('activo_circulante', 'existencias'),
     existencias: sum('existencias'),
     pasivo_circulante: sum('pasivo_circulante'),
-    total_activo: sumaOpcional('total_activo', 'activo_circulante', 'activo_fijo'),
+    total_activo: sumaOpcional('total_activo', 'activo_circulante', 'activo_fijo', 'existencias'),
     total_pasivo: sumaOpcional('total_pasivo', 'pasivo_circulante', 'pasivo_otro'),
     patrimonio: sum('patrimonio'),
     ventas: sum('ventas'),
@@ -972,74 +1027,128 @@ function valoresPorCategoria(cuentas){
   };
 }
 
+/* Cada indicador define numerador y denominador con sus categorías de origen,
+   para poder desglosar el detalle (cuentas + subtotal) de forma ordenada. */
 function calcularIndicadores(v){
   const list = [];
-  // Liquidez corriente
-  {
-    const val = (v.activo_circulante!==null && v.pasivo_circulante) ? v.activo_circulante / v.pasivo_circulante : null;
-    list.push({ key:'liquidez', label:'Liquidez corriente', valor: val, textoValor: fmtVeces(val),
-      formula:'Activo Circulante ÷ Pasivo Circulante', cuentasClave:['activo_circulante','pasivo_circulante'] });
-  }
-  // Prueba ácida
+
+  list.push({
+    key:'liquidez', grupo:'liquidez', label:'Liquidez corriente',
+    formula:'Activo Corriente ÷ Pasivo Corriente', operador:'division',
+    numerador:{ label:'Activo Corriente', categorias:['activo_circulante','existencias'], valor:v.activo_circulante },
+    denominador:{ label:'Pasivo Corriente', categorias:['pasivo_circulante'], valor:v.pasivo_circulante },
+    valor: (v.activo_circulante!==null && v.pasivo_circulante) ? v.activo_circulante / v.pasivo_circulante : null,
+    get textoValor(){ return fmtVeces(this.valor); }
+  });
+
   {
     const num = (v.activo_circulante!==null) ? v.activo_circulante - (v.existencias||0) : null;
-    const val = (num!==null && v.pasivo_circulante) ? num / v.pasivo_circulante : null;
-    list.push({ key:'acida', label:'Prueba ácida', valor: val, textoValor: fmtVeces(val),
-      formula:'(Activo Circulante − Existencias) ÷ Pasivo Circulante', cuentasClave:['activo_circulante','existencias','pasivo_circulante'] });
+    list.push({
+      key:'acida', grupo:'liquidez', label:'Prueba ácida',
+      formula:'(Activo Corriente − Existencias) ÷ Pasivo Corriente', operador:'division',
+      numerador:{ label:'Activo Corriente − Existencias', categorias:['activo_circulante'], valor:num, excluir:['existencias'] },
+      denominador:{ label:'Pasivo Corriente', categorias:['pasivo_circulante'], valor:v.pasivo_circulante },
+      valor: (num!==null && v.pasivo_circulante) ? num / v.pasivo_circulante : null,
+      get textoValor(){ return fmtVeces(this.valor); }
+    });
   }
-  // Capital de trabajo
-  {
-    const val = (v.activo_circulante!==null && v.pasivo_circulante!==null) ? v.activo_circulante - v.pasivo_circulante : null;
-    list.push({ key:'capital', label:'Capital de trabajo', valor: val, textoValor: val===null?null:fmtMoney(val),
-      formula:'Activo Circulante − Pasivo Circulante', cuentasClave:['activo_circulante','pasivo_circulante'] });
-  }
-  // Endeudamiento total
-  {
-    const val = (v.total_pasivo!==null && v.total_activo) ? v.total_pasivo / v.total_activo : null;
-    list.push({ key:'endeud_total', label:'Endeudamiento total', valor: val, textoValor: fmtVeces(val),
-      formula:'Total Pasivos ÷ Total Activos', cuentasClave:['total_pasivo','total_activo','pasivo_circulante','pasivo_otro','activo_circulante','activo_fijo'] });
-  }
-  // Endeudamiento patrimonial
-  {
-    const val = (v.total_pasivo!==null && v.patrimonio) ? v.total_pasivo / v.patrimonio : null;
-    list.push({ key:'endeud_patrim', label:'Endeudamiento patrimonial', valor: val, textoValor: fmtVeces(val),
-      formula:'Total Pasivos ÷ Patrimonio', cuentasClave:['total_pasivo','patrimonio'] });
-  }
-  // ROE
-  {
-    const val = (v.utilidad!==null && v.patrimonio) ? v.utilidad / v.patrimonio : null;
-    list.push({ key:'roe', label:'Rentabilidad del patrimonio (ROE)', valor: val, textoValor: fmtPct(val),
-      formula:'Utilidad del Ejercicio ÷ Patrimonio', cuentasClave:['utilidad','patrimonio'] });
-  }
-  // ROA
-  {
-    const val = (v.utilidad!==null && v.total_activo) ? v.utilidad / v.total_activo : null;
-    list.push({ key:'roa', label:'Rentabilidad del activo (ROA)', valor: val, textoValor: fmtPct(val),
-      formula:'Utilidad del Ejercicio ÷ Total Activos', cuentasClave:['utilidad','total_activo','activo_circulante','activo_fijo'] });
-  }
-  // Rotación de activos
-  {
-    const val = (v.ventas!==null && v.total_activo) ? v.ventas / v.total_activo : null;
-    list.push({ key:'rotacion', label:'Rotación de activos', valor: val, textoValor: fmtVeces(val),
-      formula:'Ventas ÷ Total Activos', cuentasClave:['ventas','total_activo','activo_circulante','activo_fijo'] });
-  }
+
+  list.push({
+    key:'capital', grupo:'liquidez', label:'Capital de trabajo',
+    formula:'Activo Corriente − Pasivo Corriente', operador:'resta',
+    numerador:{ label:'Activo Corriente', categorias:['activo_circulante','existencias'], valor:v.activo_circulante },
+    denominador:{ label:'Pasivo Corriente', categorias:['pasivo_circulante'], valor:v.pasivo_circulante },
+    valor: (v.activo_circulante!==null && v.pasivo_circulante!==null) ? v.activo_circulante - v.pasivo_circulante : null,
+    get textoValor(){ return this.valor===null ? null : fmtMoney(this.valor); }
+  });
+
+  list.push({
+    key:'endeud_total', grupo:'endeudamiento', label:'Endeudamiento total',
+    formula:'Total Pasivos ÷ Total Activos', operador:'division',
+    numerador:{ label:'Total Pasivos', categorias:['total_pasivo','pasivo_circulante','pasivo_otro'], valor:v.total_pasivo },
+    denominador:{ label:'Total Activos', categorias:['total_activo','activo_circulante','activo_fijo','existencias'], valor:v.total_activo },
+    valor: (v.total_pasivo!==null && v.total_activo) ? v.total_pasivo / v.total_activo : null,
+    get textoValor(){ return fmtVeces(this.valor); }
+  });
+
+  list.push({
+    key:'endeud_patrim', grupo:'endeudamiento', label:'Endeudamiento patrimonial',
+    formula:'Total Pasivos ÷ Patrimonio', operador:'division',
+    numerador:{ label:'Total Pasivos', categorias:['total_pasivo','pasivo_circulante','pasivo_otro'], valor:v.total_pasivo },
+    denominador:{ label:'Patrimonio', categorias:['patrimonio'], valor:v.patrimonio },
+    valor: (v.total_pasivo!==null && v.patrimonio) ? v.total_pasivo / v.patrimonio : null,
+    get textoValor(){ return fmtVeces(this.valor); }
+  });
+
+  list.push({
+    key:'roe', grupo:'rentabilidad', label:'Rentabilidad del patrimonio (ROE)',
+    formula:'Utilidad del Ejercicio ÷ Patrimonio', operador:'division',
+    numerador:{ label:'Utilidad del Ejercicio', categorias:['utilidad'], valor:v.utilidad },
+    denominador:{ label:'Patrimonio', categorias:['patrimonio'], valor:v.patrimonio },
+    valor: (v.utilidad!==null && v.patrimonio) ? v.utilidad / v.patrimonio : null,
+    get textoValor(){ return fmtPct(this.valor); }
+  });
+
+  list.push({
+    key:'roa', grupo:'rentabilidad', label:'Rentabilidad del activo (ROA)',
+    formula:'Utilidad del Ejercicio ÷ Total Activos', operador:'division',
+    numerador:{ label:'Utilidad del Ejercicio', categorias:['utilidad'], valor:v.utilidad },
+    denominador:{ label:'Total Activos', categorias:['total_activo','activo_circulante','activo_fijo','existencias'], valor:v.total_activo },
+    valor: (v.utilidad!==null && v.total_activo) ? v.utilidad / v.total_activo : null,
+    get textoValor(){ return fmtPct(this.valor); }
+  });
+
+  list.push({
+    key:'rotacion', grupo:'gestion', label:'Rotación de activos',
+    formula:'Ventas ÷ Total Activos', operador:'division',
+    numerador:{ label:'Ventas', categorias:['ventas'], valor:v.ventas },
+    denominador:{ label:'Total Activos', categorias:['total_activo','activo_circulante','activo_fijo','existencias'], valor:v.total_activo },
+    valor: (v.ventas!==null && v.total_activo) ? v.ventas / v.total_activo : null,
+    get textoValor(){ return fmtVeces(this.valor); }
+  });
+
   return list;
 }
 
-function renderDetalleIndicador(ind, cuentas){
-  if(!ind) return '';
-  const relevantes = cuentas.filter(c => ind.cuentasClave.includes(c.categoria));
+function bloqueDetalleColumna(titulo, categorias, cuentas, excluirCategorias){
+  const filas = cuentas.filter(c => categorias.includes(c.categoria) && !(excluirCategorias||[]).includes(c.categoria));
+  const total = filas.reduce((a,c)=>a + (parseFloat(c.monto)||0), 0);
+  return { titulo, filas, total };
+}
+
+function renderDetalleIndicador(ind, cuentas, color){
+  const colNum = bloqueDetalleColumna(ind.numerador.label, ind.numerador.categorias, cuentas, ind.numerador.excluir);
+  const colDen = bloqueDetalleColumna(ind.denominador.label, ind.denominador.categorias, cuentas);
+  const sinDatos = colNum.filas.length === 0 && colDen.filas.length === 0;
+  const signo = ind.operador === 'resta' ? '−' : '÷';
+
+  const tablaCol = (col) => `
+    <div class="ind-detail-col">
+      <h5>${esc(col.titulo)}</h5>
+      ${col.filas.length === 0 ? `<div class="cta-vacia">Sin cuentas clasificadas aquí todavía.</div>` : `
+      <table>
+        <tbody>
+          ${col.filas.map(c=>`<tr><td>${esc(c.nombre)}</td><td style="text-align:right;">${fmtMoney(c.monto)}</td></tr>`).join('')}
+          <tr class="tot-row"><td>Total ${esc(col.titulo)}</td><td style="text-align:right;">${fmtMoney(col.total)}</td></tr>
+        </tbody>
+      </table>`}
+    </div>`;
+
   return `
-  <div class="ind-detail">
-    <strong>${ind.label}</strong>
-    <div class="formula">Fórmula: ${ind.formula}</div>
-    ${relevantes.length === 0 ? `<div style="font-size:12.5px; color:var(--texto-suave);">No hay cuentas clasificadas para este indicador todavía.</div>` : `
-    <table>
-      <thead><tr><th>Cuenta</th><th>Categoría</th><th>Monto</th></tr></thead>
-      <tbody>
-        ${relevantes.map(c => `<tr><td>${esc(c.nombre)}</td><td>${esc(CATEGORIAS_CUENTA.find(k=>k.key===c.categoria)?.label || c.categoria)}</td><td>${fmtMoney(c.monto)}</td></tr>`).join('')}
-      </tbody>
-    </table>`}
+  <div class="ind-detail" style="--gcolor:${color};">
+    ${sinDatos ? `<div style="font-size:12.5px; color:var(--texto-suave); margin-bottom:12px;">Todavía no hay cuentas clasificadas para este indicador. Usa "Clasificar cuentas" para asignarlas.</div>` : ''}
+    <div class="ind-detail-cols">
+      ${tablaCol(colNum)}
+      ${tablaCol(colDen)}
+    </div>
+    <div class="ind-formula-bar">
+      <div class="f">${esc(ind.numerador.label)} (${fmtMoney(colNum.total)}) ${signo} ${esc(ind.denominador.label)} (${fmtMoney(colDen.total)})</div>
+      <div class="r">${ind.valor===null ? 'N/D' : ind.textoValor}</div>
+    </div>
+    <div class="ind-detail-actions">
+      <button class="btn btn-secondary btn-sm" data-exp-ind-excel="${ind.key}">📊 Excel</button>
+      <button class="btn btn-secondary btn-sm" data-exp-ind-pdf="${ind.key}">📄 PDF</button>
+    </div>
   </div>`;
 }
 
@@ -1101,6 +1210,12 @@ function bindModalFicha(){
     if(expXls) expXls.addEventListener('click', exportarIndicadoresExcel);
     const expPdf2 = document.getElementById('exportarIndicadoresPDF');
     if(expPdf2) expPdf2.addEventListener('click', exportarIndicadoresPDF);
+    document.querySelectorAll('[data-exp-ind-excel]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); exportarUnIndicadorExcel(btn.getAttribute('data-exp-ind-excel')); });
+    });
+    document.querySelectorAll('[data-exp-ind-pdf]').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); exportarUnIndicadorPDF(btn.getAttribute('data-exp-ind-pdf')); });
+    });
   }
 }
 
@@ -1486,12 +1601,28 @@ function exportarIndicadoresExcel(){
   const periodo = cache.periodos.find(p=>p.id===state.periodoIndicador);
   const vals = valoresPorCategoria(periodo.cuentas || []);
   const indicadores = calcularIndicadores(vals);
-  const filas = indicadores.map(i => ({ Indicador: i.label, Valor: i.textoValor || 'N/D', Fórmula: i.formula }));
-  const ws = XLSX.utils.json_to_sheet(filas);
   const wb = XLSX.utils.book_new();
+  const filasPortada = [
+    ['Novel — Consultoría & Capacitación Financiera & Tributaria'],
+    ['Indicadores financieros'],
+    [c.nombre || ''],
+    ['Período: ' + periodo.id],
+    []
+  ];
+  GRUPOS_INDICADOR.forEach(g=>{
+    const delGrupo = indicadores.filter(i=>i.grupo===g.key);
+    if(delGrupo.length===0) return;
+    filasPortada.push([g.label.toUpperCase()]);
+    filasPortada.push(['Indicador','Valor','Fórmula']);
+    delGrupo.forEach(i=> filasPortada.push([i.label, i.textoValor || 'N/D', i.formula]));
+    filasPortada.push([]);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(filasPortada);
+  ws['!cols'] = [{wch:34},{wch:16},{wch:44}];
   XLSX.utils.book_append_sheet(wb, ws, 'Indicadores');
   XLSX.writeFile(wb, `Indicadores_${(c.nombre||'cliente').replace(/\s+/g,'_')}_${periodo.id}.xlsx`);
 }
+
 function exportarIndicadoresPDF(){
   const c = clienteActivo();
   const cache = state.clienteCache[c.id];
@@ -1500,17 +1631,102 @@ function exportarIndicadoresPDF(){
   const indicadores = calcularIndicadores(vals);
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  doc.setFontSize(16); doc.setTextColor(21,51,101);
-  doc.text('Novel — Indicadores financieros', 14, 18);
-  doc.setFontSize(11); doc.setTextColor(90,90,90);
-  doc.text(`${c.nombre || ''} — Período ${periodo.id}`, 14, 25);
-  doc.autoTable({
-    startY: 32,
-    head:[['Indicador','Valor','Fórmula']],
-    body: indicadores.map(i=>[i.label, i.textoValor || 'N/D', i.formula]),
-    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }
+  doc.setFillColor(21,51,101); doc.rect(0,0,210,26,'F');
+  doc.setFontSize(16); doc.setTextColor(255,255,255);
+  doc.text('Novel — Indicadores financieros', 14, 13);
+  doc.setFontSize(10.5); doc.setTextColor(220,228,240);
+  doc.text(`${c.nombre || ''} — Período ${periodo.id}`, 14, 20);
+  let y = 34;
+  GRUPOS_INDICADOR.forEach(g=>{
+    const delGrupo = indicadores.filter(i=>i.grupo===g.key);
+    if(delGrupo.length===0) return;
+    doc.setFontSize(11.5); doc.setTextColor(21,51,101);
+    doc.text(g.label, 14, y);
+    y += 4;
+    doc.autoTable({
+      startY: y,
+      head:[['Indicador','Valor','Fórmula']],
+      body: delGrupo.map(i=>[i.label, i.textoValor || 'N/D', i.formula]),
+      headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, margin:{left:14, right:14}
+    });
+    y = doc.lastAutoTable.finalY + 10;
   });
   doc.save(`Indicadores_${(c.nombre||'cliente').replace(/\s+/g,'_')}_${periodo.id}.pdf`);
+}
+
+/* --- Exportación del detalle de UN indicador (cuentas + subtotales + fórmula) --- */
+function exportarUnIndicadorExcel(key){
+  const c = clienteActivo();
+  const cache = state.clienteCache[c.id];
+  const periodo = cache.periodos.find(p=>p.id===state.periodoIndicador);
+  const cuentas = periodo.cuentas || [];
+  const vals = valoresPorCategoria(cuentas);
+  const ind = calcularIndicadores(vals).find(i=>i.key===key);
+  if(!ind) return;
+  const colNum = bloqueDetalleColumna(ind.numerador.label, ind.numerador.categorias, cuentas, ind.numerador.excluir);
+  const colDen = bloqueDetalleColumna(ind.denominador.label, ind.denominador.categorias, cuentas);
+  const signo = ind.operador === 'resta' ? '-' : '/';
+  const filas = [
+    ['Novel — Consultoría & Capacitación Financiera & Tributaria'],
+    [ind.label],
+    [c.nombre || '', 'Período: ' + periodo.id],
+    [],
+    [colNum.titulo], ['Cuenta','Monto'],
+    ...colNum.filas.map(f=>[f.nombre, f.monto]),
+    ['Total ' + colNum.titulo, colNum.total],
+    [],
+    [colDen.titulo], ['Cuenta','Monto'],
+    ...colDen.filas.map(f=>[f.nombre, f.monto]),
+    ['Total ' + colDen.titulo, colDen.total],
+    [],
+    ['Fórmula', `${colNum.titulo} ${signo} ${colDen.titulo}`],
+    ['Resultado', ind.valor===null ? 'N/D' : ind.textoValor]
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols'] = [{wch:38},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, ind.label.slice(0,28));
+  XLSX.writeFile(wb, `${ind.label.replace(/\s+/g,'_')}_${(c.nombre||'cliente').replace(/\s+/g,'_')}_${periodo.id}.xlsx`);
+}
+
+function exportarUnIndicadorPDF(key){
+  const c = clienteActivo();
+  const cache = state.clienteCache[c.id];
+  const periodo = cache.periodos.find(p=>p.id===state.periodoIndicador);
+  const cuentas = periodo.cuentas || [];
+  const vals = valoresPorCategoria(cuentas);
+  const ind = calcularIndicadores(vals).find(i=>i.key===key);
+  if(!ind) return;
+  const colNum = bloqueDetalleColumna(ind.numerador.label, ind.numerador.categorias, cuentas, ind.numerador.excluir);
+  const colDen = bloqueDetalleColumna(ind.denominador.label, ind.denominador.categorias, cuentas);
+  const signo = ind.operador === 'resta' ? '−' : '÷';
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.setFillColor(21,51,101); doc.rect(0,0,210,26,'F');
+  doc.setFontSize(15); doc.setTextColor(255,255,255);
+  doc.text(ind.label, 14, 13);
+  doc.setFontSize(10.5); doc.setTextColor(220,228,240);
+  doc.text(`${c.nombre || ''} — Período ${periodo.id}`, 14, 20);
+  doc.autoTable({
+    startY: 34,
+    head:[[colNum.titulo,'Monto']],
+    body: [...colNum.filas.map(f=>[f.nombre, fmtMoney(f.monto)]), [{content:'Total ' + colNum.titulo, styles:{fontStyle:'bold'}}, {content:fmtMoney(colNum.total), styles:{fontStyle:'bold'}}]],
+    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, margin:{left:14, right:14}
+  });
+  let y = doc.lastAutoTable.finalY + 8;
+  doc.autoTable({
+    startY: y,
+    head:[[colDen.titulo,'Monto']],
+    body: [...colDen.filas.map(f=>[f.nombre, fmtMoney(f.monto)]), [{content:'Total ' + colDen.titulo, styles:{fontStyle:'bold'}}, {content:fmtMoney(colDen.total), styles:{fontStyle:'bold'}}]],
+    headStyles:{ fillColor:[21,51,101] }, styles:{ fontSize:9 }, margin:{left:14, right:14}
+  });
+  y = doc.lastAutoTable.finalY + 12;
+  doc.setFillColor(21,51,101); doc.roundedRect(14, y, 182, 18, 2, 2, 'F');
+  doc.setFontSize(9.5); doc.setTextColor(255,255,255);
+  doc.text(`${colNum.titulo} (${fmtMoney(colNum.total)}) ${signo} ${colDen.titulo} (${fmtMoney(colDen.total)})`, 18, y+8);
+  doc.setFontSize(13);
+  doc.text(`Resultado: ${ind.valor===null ? 'N/D' : ind.textoValor}`, 18, y+15);
+  doc.save(`${ind.label.replace(/\s+/g,'_')}_${(c.nombre||'cliente').replace(/\s+/g,'_')}_${periodo.id}.pdf`);
 }
 
 /* =========================================================
