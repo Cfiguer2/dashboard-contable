@@ -456,16 +456,22 @@ function rutValido(rut){
 function sugerirCategoria(nombreCuenta){
   const n = (nombreCuenta || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if(n.includes('total activo circulante') || (n.includes('activo circulante') && !n.includes('total activo')))
+  if(n.includes('total activo corriente') || n.includes('total activo circulante') ||
+     ((n.includes('activo corriente') || n.includes('activo circulante')) && !n.includes('total activo')))
     return 'activo_circulante';
-  if(n.includes('existencia') || n.includes('inventario')) return 'existencias';
-  if(n.includes('total pasivo circulante') || (n.includes('pasivo circulante')))
+  if(n.includes('existencia') || n.includes('inventario') || n.includes('mercader')) return 'existencias';
+  if(n.includes('activo no corriente') || n.includes('activo fijo') || n.includes('activo largo plazo')) return 'activo_fijo';
+  if(n.includes('total pasivo corriente') || n.includes('total pasivo circulante') ||
+     n.includes('pasivo corriente') || n.includes('pasivo circulante'))
     return 'pasivo_circulante';
+  if(n.includes('pasivo no corriente') || n.includes('pasivo largo plazo') || n.includes('largo plazo')) return 'pasivo_otro';
   if(n.includes('total activo') || n === 'total activos') return 'total_activo';
   if(n.includes('total pasivo') && n.includes('patrimonio')) return '';
   if(n.includes('total pasivo')) return 'total_pasivo';
-  if(n.includes('patrimonio')) return 'patrimonio';
+  if(n.includes('capital') || n.includes('patrimonio') || n.includes('resultado acumulad') || n.includes('revalorizac')) return 'patrimonio';
   if(n.includes('venta') || n.includes('ingresos de explotacion') || n.includes('ingresos por venta')) return 'ventas';
+  if(n.includes('ingreso')) return 'ingresos_otros';
+  if(n.includes('costo') || n.includes('gasto')) return 'gastos';
   if(n.includes('utilidad del ejercicio') || n.includes('resultado del ejercicio') || n.includes('perdida del ejercicio')) return 'utilidad';
   return '';
 }
@@ -1461,14 +1467,16 @@ function detectarEncabezado(rows){
     const fila = (rows[i] || []).map(normTxt);
     if(fila.length === 0) continue;
 
-    // Formato "Balance 8 columnas" (Chile): Cuenta, Descripción, Debe, Haber, Deudor, Acreedor, Activo, Pasivo, Perdida, Ganancia
+    // Formato "Balance 8 columnas" (Chile): Cuenta[+Descripción], Debe, Haber, Deudor, Acreedor, Activo, Pasivo, Perdida, Ganancia
+    // La columna "Descripción" es opcional: algunos balances traen el código y el nombre
+    // de la cuenta juntos en la misma columna "Cuenta" (ej: "1101-01 CAJA/BANCO").
     const iCuenta = fila.findIndex(c=>c === 'cuenta' || c.startsWith('cuenta'));
     const iDescripcion = fila.findIndex(c=>c.includes('descripcion'));
     const iActivo = fila.findIndex(c=>c.includes('activo'));
     const iPasivo = fila.findIndex(c=>c.includes('pasivo'));
     const iPerdida = fila.findIndex(c=>c.includes('perdida'));
     const iGanancia = fila.findIndex(c=>c.includes('ganancia'));
-    if(iCuenta !== -1 && iDescripcion !== -1 && iActivo !== -1 && iPasivo !== -1 && (iPerdida !== -1 || iGanancia !== -1)){
+    if(iCuenta !== -1 && iActivo !== -1 && iPasivo !== -1 && (iPerdida !== -1 || iGanancia !== -1)){
       return { formato:'ocho_columnas', filaIni:i+1, iCuenta, iDescripcion, iActivo, iPasivo, iPerdida, iGanancia };
     }
 
@@ -1490,25 +1498,53 @@ function detectarEncabezado(rows){
   return null;
 }
 
-/* --- Clasifica una cuenta del Balance 8 columnas según el prefijo de su código --- */
+/* --- Clasifica una cuenta del Balance 8 columnas combinando el código y palabras clave
+   de la descripción. Se diseñó para funcionar con distintos planes de cuentas (ej: "1.1.1010"
+   con puntos, o "1101-01" con guion), ya que la posición exacta de los dígitos varía entre
+   sistemas contables. Primer dígito = clase de cuenta (1 Activo, 2 Pasivo/Patrimonio,
+   3/5 Ingresos, 4 Gastos); segundo dígito = si el Activo es corriente(1) o no corriente(2).
+   Para Pasivo/Patrimonio se prioriza la descripción (más confiable entre distintos planes). --- */
 function categoriaPorCodigo(codigo, descripcion){
-  const cod = String(codigo || '').trim();
+  const soloDigitos = String(codigo || '').replace(/[^0-9]/g, '');
   const desc = normTxt(descripcion);
-  if(/^1\.1/.test(cod)){
+  if(!soloDigitos) return '';
+  const primero = soloDigitos[0];
+  const segundo = soloDigitos[1] || '';
+
+  if(primero === '1'){
+    if(/vehiculo|maquinaria|bien.?raiz|construccion|mueble|instalacion|depreciacion|terreno|equipo|edificio|activo fijo/.test(desc)) return 'activo_fijo';
     if(/mercader|existenc|inventario/.test(desc)) return 'existencias';
-    return 'activo_circulante';
+    return segundo === '1' ? 'activo_circulante' : 'activo_fijo';
   }
-  if(/^1\./.test(cod)) return 'activo_fijo';
-  if(/^2\.4/.test(cod)) return 'patrimonio';
-  if(/^2\.[123]/.test(cod)) return 'pasivo_circulante';
-  if(/^2\./.test(cod)) return 'pasivo_otro';
-  if(/^3\.1/.test(cod)) return 'ventas';
-  if(/^3\./.test(cod)) return 'ingresos_otros';
-  if(/^4\./.test(cod)) return 'gastos';
+  if(primero === '2'){
+    if(/capital|patrimonio|resultado acumulad|revalorizac|ejercicio/.test(desc)) return 'patrimonio';
+    if(/largo plazo|l\.?\s?plazo\b/.test(desc)) return 'pasivo_otro';
+    return 'pasivo_circulante';
+  }
+  if(primero === '3' || primero === '5'){
+    return /venta/.test(desc) ? 'ventas' : 'ingresos_otros';
+  }
+  if(primero === '4') return 'gastos';
   return '';
 }
 
 /* --- Parser del formato "Balance 8 columnas" (código de cuenta define la categoría) --- */
+/* Detecta si el texto de una fila corresponde a un total/resumen (Sumas, Totales,
+   Resultado, Pérdida/Utilidad del Ejercicio, Saldo) para excluirla de las cuentas. */
+function esFilaResumenTotal(texto){
+  const n = normTxt(texto);
+  return /^(sumas?|totales?|resultado(\s+del\s+ejercicio)?|perdida(\s+del)?\s+ejercicio|utilidad(\s+del)?\s+ejercicio|saldo)\b/.test(n);
+}
+
+/* Separa código y nombre cuando vienen en una sola celda. Admite: solo código
+   ("1101-01"), solo nombre ("Caja y Bancos") o código + nombre ("1101-01 Caja"). */
+function extraerCodigoNombre(celdaTexto){
+  const t = String(celdaTexto || '').trim();
+  const m = /^([\d][\d.\-\/]*)(?:\s+(.*))?$/.exec(t);
+  if(m) return { codigo: m[1], nombre: (m[2]||'').trim() };
+  return { codigo: '', nombre: t }; // no empieza con número → se trata como solo-nombre
+}
+
 function parsearOchoColumnas(rows, det){
   const cuentas = [];
   // Si el encabezado de "Pérdida" vino con la codificación dañada, se asume que está
@@ -1517,21 +1553,39 @@ function parsearOchoColumnas(rows, det){
   for(let i = det.filaIni; i < rows.length; i++){
     const fila = rows[i];
     if(!fila || fila.length === 0) continue;
-    const codigo = String(fila[det.iCuenta] ?? '').trim();
-    const descripcion = String(fila[det.iDescripcion] ?? '').trim();
-    if(!codigo || !/^\d/.test(codigo)) continue; // ignora filas de totales/encabezados intermedios
+    const celdaCuenta = String(fila[det.iCuenta] ?? '').trim();
+    if(!celdaCuenta || esFilaResumenTotal(celdaCuenta)) continue; // ignora filas de totales/resumen
+
+    let codigo, descripcion;
+    if(det.iDescripcion !== -1){
+      // Hay columna de Descripción aparte: la celda "Cuenta" puede traer solo el código,
+      // o a veces también el nombre repetido — se usa como código si empieza con número.
+      const ex = extraerCodigoNombre(celdaCuenta);
+      codigo = ex.codigo;
+      descripcion = String(fila[det.iDescripcion] ?? '').trim() || ex.nombre;
+    } else {
+      // Código y nombre vienen juntos (o solo uno de los dos) en una sola celda
+      const ex = extraerCodigoNombre(celdaCuenta);
+      codigo = ex.codigo;
+      descripcion = ex.nombre;
+    }
+    const nombreCuenta = descripcion || codigo || celdaCuenta;
+
     const activo = aNumero(fila[det.iActivo]);
     const pasivo = aNumero(fila[det.iPasivo]);
     const perdida = iPerdida !== -1 ? aNumero(fila[iPerdida]) : 0;
     const ganancia = det.iGanancia !== -1 ? aNumero(fila[det.iGanancia]) : 0;
-    const cat = categoriaPorCodigo(codigo, descripcion);
+    if(activo === 0 && pasivo === 0 && perdida === 0 && ganancia === 0) continue;
+
+    // Con código: se clasifica por código+nombre. Sin código (solo nombre): se clasifica
+    // por palabras clave del nombre, igual que en el formato genérico de 2 columnas.
+    const cat = codigo ? categoriaPorCodigo(codigo, nombreCuenta) : sugerirCategoria(nombreCuenta);
     let monto = 0;
     if(cat === 'ventas' || cat === 'ingresos_otros') monto = ganancia - perdida;
     else if(cat === 'gastos') monto = perdida - ganancia; // valor positivo = gasto real
     else if(cat === 'pasivo_circulante' || cat === 'pasivo_otro' || cat === 'patrimonio') monto = pasivo - activo; // saldo normal acreedor
-    else monto = activo - pasivo; // activo_circulante / activo_fijo / existencias: saldo normal deudor
-    if(activo === 0 && pasivo === 0 && perdida === 0 && ganancia === 0) continue;
-    cuentas.push({ nombre: descripcion || codigo, codigo, monto, categoria: cat, origen:'balance8col' });
+    else monto = activo - pasivo; // activo_circulante / activo_fijo / existencias / sin clasificar: saldo normal deudor
+    cuentas.push({ nombre: nombreCuenta, codigo, monto, categoria: cat, origen:'balance8col' });
   }
   // Calcula la utilidad del ejercicio como Ingresos - Gastos y la agrega como una cuenta consolidada
   const ingresos = cuentas.filter(c=>c.categoria==='ventas'||c.categoria==='ingresos_otros').reduce((a,c)=>a+c.monto,0);
@@ -1636,30 +1690,45 @@ function parsearYGuardarBalance(clienteId, file, tipo){
   });
 }
 
-/* --- Genera y descarga la plantilla de carga masiva --- */
+/* --- Genera y descarga la plantilla de carga masiva, en el formato "código y nombre juntos"
+   (el mismo del balance de referencia 01_2024_XXX) --- */
 function descargarPlantillaCarga(){
-  const filasDatos = CATEGORIAS_CUENTA.filter(c=>c.key).map(c=>[c.label, '', 0]);
-  const ws = XLSX.utils.aoa_to_sheet([
-    ['Categoría', 'Cuenta (opcional, referencial)', 'Monto'],
-    ...filasDatos
-  ]);
-  ws['!cols'] = [{wch:26},{wch:34},{wch:16}];
+  const encabezado = ['Cuenta','Debe','Haber','Deudor','Acreedor','Activo','Pasivo','Pérdida','Ganancia'];
+  const ejemplo = [
+    ['1101-01 CAJA / BANCO', 1000000, 0, 1000000, 0, 1000000, 0, 0, 0],
+    ['1109-01 EXISTENCIAS / MERCADERÍAS', 500000, 0, 500000, 0, 500000, 0, 0, 0],
+    ['1205-01 ACTIVO FIJO (VEHÍCULOS, MAQUINARIA, ETC.)', 800000, 0, 800000, 0, 800000, 0, 0, 0],
+    ['2116-01 PROVEEDORES POR PAGAR', 0, 400000, 0, 400000, 0, 400000, 0, 0],
+    ['2203-01 DEUDA LARGO PLAZO', 0, 300000, 0, 300000, 0, 300000, 0, 0],
+    ['2301-01 CAPITAL', 0, 900000, 0, 900000, 0, 900000, 0, 0],
+    ['2305-01 RESULTADOS ACUMULADOS', 0, 500000, 0, 500000, 0, 500000, 0, 0],
+    ['5101-01 VENTAS', 0, 250000, 0, 250000, 0, 0, 0, 250000],
+    ['4101-01 COSTOS Y GASTOS', 50000, 0, 50000, 0, 0, 0, 50000, 0],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([encabezado, ...ejemplo]);
+  ws['!cols'] = [{wch:38},{wch:13},{wch:13},{wch:13},{wch:13},{wch:13},{wch:13},{wch:13},{wch:13}];
   const wsInstr = XLSX.utils.aoa_to_sheet([
-    ['Instrucciones para usar esta plantilla'],
+    ['Instrucciones para usar esta plantilla — Balance de 8 columnas'],
     [''],
-    ['1. No cambies el texto de la columna "Categoría" — el sistema la usa para calcular los indicadores.'],
-    ['2. En "Cuenta" puedes escribir un detalle o dejarlo en blanco.'],
-    ['3. En "Monto" escribe el valor en pesos, sin puntos ni signos ($).'],
-    ['4. Si una categoría no aplica a esta empresa, puedes dejar el monto en 0.'],
-    ['5. Guarda el archivo y súbelo con el botón "Cargar Balance" o "EE.RR." según corresponda.'],
+    ['1. Reemplaza las filas de ejemplo por las cuentas reales de tu balance (puedes borrar los ejemplos).'],
+    ['2. Mantén las columnas en este orden: Cuenta, Debe, Haber, Deudor, Acreedor, Activo, Pasivo, Pérdida, Ganancia.'],
+    ['3. En "Cuenta" escribe el código de la cuenta seguido de su nombre, separados por un espacio (ej: "1101-01 CAJA / BANCO"). No hace falta una columna aparte para el nombre.'],
+    ['4. El código debe empezar con un número que indique el tipo de cuenta:'],
+    ['     • 1... = Activo   → si el segundo dígito es "1" se toma como Activo Corriente, cualquier otro como Activo No Corriente / Fijo.'],
+    ['     • 2... = Pasivo o Patrimonio → si el nombre contiene palabras como "capital", "patrimonio", "resultado acumulado" o "revalorización", se clasifica como Patrimonio; si contiene "largo plazo", como Pasivo No Corriente; el resto, como Pasivo Corriente.'],
+    ['     • 3... o 5... = Ingresos → si el nombre contiene "venta", se clasifica como Ventas; el resto, como Otros Ingresos.'],
+    ['     • 4... = Gastos y Costos.'],
+    ['5. También se acepta el formato con puntos (ej: "1.1.1010") con el nombre en una columna "Descripción" aparte, si así lo entrega tu software contable.'],
+    ['6. Guarda el archivo y súbelo con el botón "Cargar Balance" o "EE.RR." según corresponda.'],
+    ['7. Después de cargar, revisa la pestaña "Clasificar cuentas" por si alguna cuenta quedó sin clasificar o necesita un ajuste manual.'],
     [''],
     ['Novel — Consultoría & Capacitación Financiera & Tributaria']
   ]);
-  wsInstr['!cols'] = [{wch:80}];
+  wsInstr['!cols'] = [{wch:100}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, wsInstr, 'Instrucciones');
-  XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
-  XLSX.writeFile(wb, 'Plantilla_carga_balance_Novel.xlsx');
+  XLSX.utils.book_append_sheet(wb, ws, 'Balance 8 columnas');
+  XLSX.writeFile(wb, 'Plantilla_balance_8_columnas_Novel.xlsx');
 }
 
 async function obtenerCuentasPrevias(clienteId){
