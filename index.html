@@ -1463,6 +1463,7 @@ function aNumero(v){
 
 /* --- Detecta en qué fila están los encabezados y qué formato es --- */
 function detectarEncabezado(rows){
+  let mejorDiagnostico = null; // guarda el intento más cercano a calzar, para el mensaje de error
   for(let i = 0; i < Math.min(rows.length, 15); i++){
     const fila = (rows[i] || []).map(normTxt);
     if(fila.length === 0) continue;
@@ -1478,6 +1479,11 @@ function detectarEncabezado(rows){
     const iGanancia = fila.findIndex(c=>c.includes('ganancia'));
     if(iCuenta !== -1 && iActivo !== -1 && iPasivo !== -1 && (iPerdida !== -1 || iGanancia !== -1)){
       return { formato:'ocho_columnas', filaIni:i+1, iCuenta, iDescripcion, iActivo, iPasivo, iPerdida, iGanancia };
+    }
+    // Registra qué tan cerca estuvo esta fila de calzar como "Balance 8 columnas", para diagnóstico
+    const encontrados8 = [iCuenta!==-1&&'Cuenta', iActivo!==-1&&'Activo', iPasivo!==-1&&'Pasivo', (iPerdida!==-1||iGanancia!==-1)&&'Pérdida/Ganancia'].filter(Boolean);
+    if(encontrados8.length > 0 && (!mejorDiagnostico || encontrados8.length > mejorDiagnostico.encontrados.length)){
+      mejorDiagnostico = { fila:i+1, encontrados: encontrados8, faltantes: ['Cuenta','Activo','Pasivo','Pérdida/Ganancia'].filter(x=>!encontrados8.includes(x)) };
     }
 
     // Formato plantilla propia: Categoría, Cuenta, Monto
@@ -1495,7 +1501,7 @@ function detectarEncabezado(rows){
       return { formato:'generico', filaIni:i+1, iCuenta: iCtaGen, iMonto: iMontoGen };
     }
   }
-  return null;
+  return { formato:null, diagnostico: mejorDiagnostico };
 }
 
 /* --- Clasifica una cuenta del Balance 8 columnas combinando el código y palabras clave
@@ -1638,8 +1644,17 @@ function parsearYGuardarBalance(clienteId, file, tipo){
         const rows = XLSX.utils.sheet_to_json(sheet, { header:1, defval:'' });
 
         const det = detectarEncabezado(rows);
-        if(!det){
-          toast('No reconocí el formato de este archivo. Descarga la plantilla en la pestaña Archivos y súbela con ese formato para que los indicadores se calculen igual.', 'err');
+        if(!det || !det.formato){
+          let msg = 'No reconocí el formato de este archivo.';
+          if(det && det.diagnostico){
+            const d = det.diagnostico;
+            msg += ` En la fila ${d.fila} encontré: ${d.encontrados.join(', ')}.`;
+            if(d.faltantes.length) msg += ` Pero no encontré una columna de: ${d.faltantes.join(', ')}.`;
+          } else {
+            msg += ' No encontré ninguna fila con encabezados reconocibles (Cuenta, Activo, Pasivo, etc.) en las primeras 15 filas.';
+          }
+          msg += ' Descarga la plantilla en la pestaña Archivos y súbela con ese formato para que los indicadores se calculen igual.';
+          toast(msg, 'err');
           resolve();
           return;
         }
